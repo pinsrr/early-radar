@@ -1,0 +1,69 @@
+name: Early Radar
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes (GitHub may delay scheduled runs by a few minutes)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: early-radar
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Load stored history from the data branch
+        run: |
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" data >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch data "$REMOTE" store   # fails the run rather than starting from empty
+          else
+            echo "No data branch yet: first run starts a fresh history."
+            mkdir -p store
+          fi
+
+      - name: Collect + analyse
+        run: node scripts/run.js --store store --out site
+
+      - name: Save history to the data branch
+        run: |
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          cd store
+          rm -rf .git
+          git init --quiet -b data
+          git config user.name "early-radar-bot"
+          git config user.email "early-radar-bot@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "radar data $(date -u +%Y-%m-%dT%H:%MZ)"
+          # One commit, force-pushed: the branch never grows a long history.
+          git push --quiet -f "$REMOTE" data
+          # Daily backup copy, in case a bad run ever corrupts the store.
+          if [ "$(date -u +%H)" = "00" ] && [ "$(date -u +%M)" -lt 30 ]; then git push --quiet -f "$REMOTE" data:data-backup; fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
