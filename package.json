@@ -1,0 +1,14 @@
+{
+  "name": "rotrend-early-radar",
+  "version": "0.2.0",
+  "description": "Roblox early trend radar: finds up-and-coming games and rising gameplay mechanics before they go mainstream.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "run": "node scripts/run.js --store store --out site",
+    "fixture": "node scripts/run.js --store tmp/store --out tmp/site --fixture fixtures",
+    "test": "node --test test/*.test.js",
+    "serve": "node scripts/serve.js tmp/site"
+  }
+}

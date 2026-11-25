@@ -1,0 +1,23 @@
+{
+  "_comment": "How the collector finds games. Early discovery is the priority: Up-and-Coming and Top Trending lists per country, plus deep keyword searches that reach games with very few players.",
+  "earlySorts": ["up-and-coming", "top-trending"],
+  "countries": ["all", "us", "br", "ph", "id", "gb", "mx", "de", "fr", "th", "vn", "ca", "au", "tr", "pl", "es", "jp", "kr"],
+  "countriesPerRun": 8,
+  "scanAllSortsEveryRuns": 4,
+  "searchKeywords": [
+    "steal", "steal a", "rng", "rebirth", "tycoon", "merge", "idle", "afk", "incremental", "obby",
+    "tower defense", "fishing", "fish for", "garden", "grow a", "farm", "survival", "battlegrounds", "horror", "dungeon",
+    "raid", "base", "trading", "ragdoll", "physics", "crash", "brainrot", "dig", "mine", "throw",
+    "pull a", "break", "lucky block", "card opening", "pack opening", "collect", "pets", "eggs", "hatch", "evolve",
+    "unbox", "case opening", "roll", "aura", "spin", "plane", "car", "drive", "escape", "co-op",
+    "extraction", "shooter", "pvp", "arena", "parkour", "speed", "race", "simulator", "clicker", "upgrade",
+    "craft", "build", "defend", "zombie", "monster", "chase", "hide", "find", "cook", "restaurant",
+    "shop", "store", "cleaning", "asmr", "satisfying", "sandbox", "destroy", "demolish", "storm", "tsunami",
+    "disaster", "volcano", "river", "raft", "island", "forest", "nights", "boss", "anime", "sword"
+  ],
+  "keywordsPerRun": 12,
+  "searchPagesPerKeyword": 3,
+  "maxTrackedGames": 4000,
+  "requestGapMs": 250,
+  "dropRules": { "minPeakCcu7d": 5, "graceDaysAfterFirstSeen": 7 }
+}

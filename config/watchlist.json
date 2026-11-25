@@ -1,0 +1,5 @@
+{
+  "_comment": "Universe IDs (the number in the dashboard URL #/game/ID) and mechanic ids to watch. Watched games raise an alert on any 24h move of 50% or more.",
+  "games": [],
+  "mechanics": ["stealing", "physics", "throw_distance"]
+}
