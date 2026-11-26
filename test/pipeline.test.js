@@ -120,3 +120,49 @@ test('social timing labels social-first vs players-first', async () => {
   assert.equal(t.socialFirst, 1);
   assert.equal(t.playersFirst, 1);
 });
+
+test('weight tuning moves weight toward the component that predicts outcomes, within guardrails', async () => {
+  const { learnWeights } = await import('../src/predict.js');
+  const { Store } = await import('../src/store.js');
+  const { DEFAULT_WEIGHTS, COMPONENT_KEYS } = await import('../src/scoring.js');
+  const os = await import('node:os'); const path = await import('node:path');
+  const store = new Store(fs.mkdtempSync(path.join(os.tmpdir(), 'radar-')));
+  const D = 864e5, now = Date.parse('2026-12-20T00:00:00Z');
+  // SYNTHETIC: on each of 10 days, 60 games; only 'accel' (a lightly weighted component) predicts growth.
+  const days = {}, series = new Map();
+  let seed = 7; const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let d = 0; d < 10; d++) {
+    const key = new Date(now - (20 - d) * D).toISOString().slice(0, 10), t0 = Date.parse(key + 'T12:00:00Z');
+    days[key] = {};
+    for (let g = 0; g < 60; g++) {
+      const id = `${d}-${g}`, comps = COMPONENT_KEYS.map(() => Math.round(rand() * 1000) / 1000);
+      const accel = comps[COMPONENT_KEYS.indexOf('accel')];
+      days[key][id] = [50, ...comps, 100];
+      const later = accel > 0.6 ? 220 : 100;
+      series.set(id, [[t0 + 7 * D - 2 * 36e5, later, 0, 0], [t0 + 7 * D - 36e5, later, 0, 0], [t0 + 7 * D, later, 0, 0]]);
+    }
+  }
+  store.writeJson('score-snapshots.json', { days });
+  const st = learnWeights(store, { now, series });
+  assert.ok(st.dataset.samples >= 300, JSON.stringify(st.dataset));
+  assert.ok(st.history.at(-1).accepted, JSON.stringify(st.history.at(-1)));
+  assert.ok(st.weights.accel > DEFAULT_WEIGHTS.accel && st.weights.accel <= DEFAULT_WEIGHTS.accel + 3.5, JSON.stringify(st.weights));
+  const sum = Object.values(st.weights).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 100) < 0.5);
+  assert.ok(Object.values(st.weights).every(w => w >= 2.9 && w <= 35.1));
+});
+
+test('prediction evaluation: hit, miss, and dropped game counts as miss', async () => {
+  const { evaluate } = await import('../src/predict.js');
+  const D = 864e5, t0 = Date.parse('2026-12-01T00:00:00Z'), now = t0 + 8 * D;
+  const pts = v => [[t0 + 7 * D - 2 * 36e5, v], [t0 + 7 * D - 36e5, v], [t0 + 7 * D, v]];
+  const P = { games: [
+    { id: 'a', group: 'predicted', madeAt: new Date(t0).toISOString(), baseline: 100, outcomes: {} },
+    { id: 'b', group: 'predicted', madeAt: new Date(t0).toISOString(), baseline: 100, outcomes: {} },
+    { id: 'c', group: 'predicted', madeAt: new Date(t0).toISOString(), baseline: 100, outcomes: {} },
+  ], mechanics: [], firstFlag: {}, leads: [], missed: [] };
+  evaluate(P, { now, series: new Map([['a', pts(180)], ['b', pts(120)]]), reg: { games: { c: { active: false } } }, games: [], mechanics: [] });
+  assert.equal(P.games[0].outcomes[7].result, 'hit');
+  assert.equal(P.games[1].outcomes[7].result, 'miss');
+  assert.equal(P.games[2].outcomes[7].result, 'miss');
+});

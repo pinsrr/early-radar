@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { gameMetrics, chartSeries } from './metrics.js';
-import { buildPeers, baseComponents, finalScore, STAGES } from './scoring.js';
+import { buildPeers, baseComponents, finalScore, STAGES, DEFAULT_WEIGHTS } from './scoring.js';
+import { makeDailyPredictions, evaluate, accuracy, learnWeights } from './predict.js';
 import { tagGame, mineNamePatterns } from './mechanics.js';
 import { mechanicStats, comboStats, genreStats, patternStats, opportunityNotes } from './momentum.js';
 import { makeAlerts } from './alerts.js';
@@ -32,7 +33,10 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb, so
   const peersOf = buildPeers(rows);
   for (const r of rows) baseComponents(r, peersOf, now);
   const momentum = new Map(mechanicStats(rows, rules, now).map(m => [m.id, m.momentum]));
-  for (const r of rows) finalScore(r, momentum);
+  // Phase 5: score weights learned from real outcomes (defaults until enough evidence exists).
+  const weightState = store.readJson('weights.json', null);
+  const W = weightState?.weights || DEFAULT_WEIGHTS;
+  for (const r of rows) finalScore(r, momentum, W);
   const mechanics = mechanicStats(rows, rules, now);
   const mechNames = Object.fromEntries(rules.mechanics.map(m => [m.id, m.name]));
   const combos = comboStats(rows, mechNames, now);
@@ -75,6 +79,23 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb, so
     const ctx = { now, h, games, mechanics, combos, genres, opportunities: opportunities?.error ? null : opportunities, clusters: opportunities?.clusters, timing, newGamesToday: games.filter(g => (g.firstSeen || '').slice(0, 10) === today).length };
     publishReports(store, outDir, dailyReport(ctx), weeklyReport(ctx));
   } catch (e) { console.error('[reports] failed:', e); }
+
+  // Phase 5: predictions + backtesting + weight tuning (wrapped: never breaks collection).
+  let predictionsOut = null;
+  try {
+    const { P, created } = makeDailyPredictions(store, { now, rows, games, mechanics });
+    evaluate(P, { now, series, reg, games, mechanics });
+    store.writeJson('predictions.json', P);
+    const ws = learnWeights(store, { now, series });
+    const latestDay = P.games.length ? P.games.at(-1).madeAt.slice(0, 10) : null;
+    predictionsOut = {
+      generatedAt: new Date(now).toISOString(), createdThisRun: created, accuracy: accuracy(P),
+      open: P.games.filter(p => p.group === 'predicted' && p.madeAt.slice(0, 10) === latestDay),
+      evaluated: P.games.filter(p => p.group === 'predicted' && Object.keys(p.outcomes).length).slice(-150).reverse(),
+      mechanics: P.mechanics.slice(-60).reverse(), leads: P.leads.slice(-50).reverse(), missed: P.missed.slice(-50).reverse(),
+      weights: { current: ws.weights, defaults: DEFAULT_WEIGHTS, status: ws.status || 'collecting outcomes', dataset: ws.dataset, suggested: ws.suggested || null, history: ws.history || [] },
+    };
+  } catch (e) { console.error('[predictions] failed:', e); predictionsOut = { error: String(e?.stack || e) }; }
 
   const prev = store.readJson('state.json', {});
   const newAlerts = makeAlerts({ games, mechanics, combos, prev, watch, nowIso: new Date(now).toISOString() });
@@ -120,6 +141,7 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb, so
   w('alerts.json', alerts);
   w('mechanic-names.json', mechNames);
   if (opportunities) w('opportunities.json', opportunities);
+  if (predictionsOut) w('predictions.json', predictionsOut);
 
   store.writeJson('state.json', {
     at: summary.generatedAt,

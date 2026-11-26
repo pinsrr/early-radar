@@ -65,12 +65,23 @@ export function baseComponents(r, peersOf, now = Date.now()) {
   return r;
 }
 
-const W = { growth: 25, accel: 10, consistency: 10, engage: 15, fresh: 10, early: 10, mechanic: 10, disc: 10 };
+export const DEFAULT_WEIGHTS = { growth: 25, accel: 10, consistency: 10, engage: 15, fresh: 10, early: 10, mechanic: 10, disc: 10 };
+export const COMPONENT_KEYS = Object.keys(DEFAULT_WEIGHTS);
+
+// Component values (0..1, null = not measurable yet) used for scoring and for learning weights.
+export function componentVector(r, mechMomentum) {
+  const c = r.c;
+  const mech = r.tags.length ? Math.max(...r.tags.map(t => (mechMomentum.get(t.id) ?? 0) * (t.confidence === 'low' ? 0.5 : 1))) / 100 : 0;
+  return { growth: c.growthPct, accel: c.accel, consistency: c.consistency, engage: c.engage, fresh: c.fresh, early: c.early, mechanic: mech, disc: c.disc };
+}
 
 // Pass 2: final score with mechanic momentum, penalties and explanation.
-export function finalScore(r, mechMomentum) {
+export function finalScore(r, mechMomentum, weights = DEFAULT_WEIGHTS) {
+  const W = weights;
   const c = r.c, m = r.m;
-  const mech = r.tags.length ? Math.max(...r.tags.map(t => (mechMomentum.get(t.id) ?? 0) * (t.confidence === 'low' ? 0.5 : 1))) / 100 : 0;
+  const vec = componentVector(r, mechMomentum);
+  r.vec = vec;
+  const mech = vec.mechanic;
   const parts = [
     ['Growth vs peers', 'growth', c.growthPct, `${r.growth.label}; ${Math.round(c.growthPct * 100)}th pct in ${c.peerKey}` + (r.growth.kind === 'cold-start' ? ' (estimate until 48h of history)' : '')],
     ['Acceleration', 'accel', c.accel, c.accel == null ? 'needs 72h of history — neutral' : 'growth rate today vs yesterday'],
