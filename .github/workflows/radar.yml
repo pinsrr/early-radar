@@ -45,6 +45,8 @@ jobs:
 
       - name: Collect + analyse
         run: node scripts/run.js --store store --out site
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
 
       - name: Save history to the data branch
         run: |
