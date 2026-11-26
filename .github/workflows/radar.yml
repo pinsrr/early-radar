@@ -64,7 +64,7 @@ jobs:
           if [ "$(date -u +%H)" = "00" ] && [ "$(date -u +%M)" -lt 30 ]; then git push --quiet -f "$REMOTE" data:data-backup; fi
 
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
       - id: deploy
