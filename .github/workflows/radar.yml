@@ -18,9 +18,6 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -67,5 +64,15 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site
+
+  # Separate deploy job (GitHub's recommended setup): it starts after the upload is fully registered.
+  deploy:
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
