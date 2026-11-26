@@ -15,9 +15,9 @@
     "shop", "store", "cleaning", "asmr", "satisfying", "sandbox", "destroy", "demolish", "storm", "tsunami",
     "disaster", "volcano", "river", "raft", "island", "forest", "nights", "boss", "anime", "sword"
   ],
-  "keywordsPerRun": 12,
+  "keywordsPerRun": 6,
   "searchPagesPerKeyword": 3,
   "maxTrackedGames": 4000,
-  "requestGapMs": 250,
+  "requestGapMs": 700,
   "dropRules": { "minPeakCcu7d": 5, "graceDaysAfterFirstSeen": 7 }
 }
