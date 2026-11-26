@@ -76,7 +76,7 @@ function observatory(games) {
           ${bodies}
         </g>
       </svg>
-      <div class="obs-head"><div><h1>Early discoveries</h1><p>Every rising game on one sky. New signals circle the outer orbit; the closer to the core, the more mainstream. Size shows players right now. Pick a body to inspect it.</p></div></div>
+      <div class="obs-head"><div><h1>Early discoveries</h1><p>Every rising game on one sky. Games 15 days old or younger circle the outer orbits as early signals; the closer to the core, the more mainstream. Size shows players right now. Pick a body to inspect it.</p></div></div>
       <div class="obs-legend">${rings.slice().reverse().map(([st]) => `<span style="--c:${STAGE_COLOR[st]}">${st}</span>`).join('')}</div>
       <div class="obs-count"><div class="v">${shown.toLocaleString('en')}</div><div class="l">early games in view</div></div>
     </div>
@@ -202,7 +202,7 @@ const pages = {
     const [games, names, sum] = await Promise.all([load('games.json'), load('mechanic-names.json'), load('summary.json')]);
     const genres = [...new Set(games.map(g => g.genre))].sort();
     const q = Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''));
-    const maxCcu = +(q.max || 20000), maxAge = +(q.age || 60), st = q.stage || 'early', gen = q.genre || '', mech = q.mech || '';
+    const maxCcu = +(q.max || 20000), maxAge = +(q.age || 15), st = q.stage || 'early', gen = q.genre || '', mech = q.mech || '';
     let list = games.filter(g => g.ccu <= maxCcu && g.ageDays <= maxAge && (!gen || g.genre === gen) && (!mech || g.tags.includes(mech)));
     if (st === 'early') list = list.filter(g => ['Early Signal', 'Emerging'].includes(g.stage)); else if (st) list = list.filter(g => g.stage === st);
     const fresh = games.filter(g => Date.now() - Date.parse(g.firstSeen) < 864e5 && ['Early Signal', 'Emerging'].includes(g.stage)).slice(0, 8);
@@ -215,7 +215,7 @@ const pages = {
     <p class="sub" style="margin-bottom:14px">Growth against games of the same genre and size, freshness, earliness, engagement, mechanic momentum and discovery-list signals.</p>
     <form class="filters" id="f">
       <label>Max CCU<select name="max">${[500, 2000, 5000, 20000, 50000, 1e9].map(v => opt(v, maxCcu, v === 1e9 ? 'any' : fmt(v))).join('')}</select></label>
-      <label>Max age (days)<select name="age">${[7, 14, 30, 60, 120, 100000].map(v => opt(v, maxAge, v === 100000 ? 'any' : v)).join('')}</select></label>
+      <label>Max age (days)<select name="age">${[7, 15, 30, 60, 120, 100000].map(v => opt(v, maxAge, v === 100000 ? 'any' : v)).join('')}</select></label>
       <label>Stage<select name="stage">${opt('early', st, 'Early Signal + Emerging')}${opt('', st, 'All')}${['Early Signal', 'Emerging', 'Accelerating', 'Not trending'].map(s => opt(s, st)).join('')}</select></label>
       <label>Genre<select name="genre">${opt('', gen, 'All')}${genres.map(g => opt(g, gen)).join('')}</select></label>
       <label>Mechanic<select name="mech">${opt('', mech, 'All')}${Object.entries(names).map(([k, v]) => opt(k, mech, v)).join('')}</select></label>

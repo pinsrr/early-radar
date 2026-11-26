@@ -105,14 +105,18 @@ export function finalScore(r, mechMomentum, weights = DEFAULT_WEIGHTS) {
   return r;
 }
 
-export function classifyGame(r) {
+// A game must be this young to count as Early Signal or Emerging: the point is to catch games early.
+export const EARLY_MAX_AGE_DAYS = 15;
+
+export function classifyGame(r, maxAge = EARLY_MAX_AGE_DAYS) {
   const { m, score } = r;
+  const young = m.ageDays <= maxAge;
   const g = m.growth7d ?? m.growth24;
   if (g != null && g < -0.3 && m.daysOfHistory >= 2) return 'Saturated or Declining';
   if (m.ccu >= 100000 || (m.discovery.topPlaying && m.ccu >= 50000)) return 'Mainstream';
   if (m.ccu >= 20000 && (score >= 55 || (m.growth24 ?? 0) > 0.15)) return 'Accelerating';
-  if (m.ccu >= 1500 && score >= 50) return 'Emerging';
-  if (score >= 48) return 'Early Signal';
+  if (young && m.ccu >= 1500 && score >= 50) return 'Emerging';
+  if (young && score >= 48) return 'Early Signal';
   return 'Not trending';
 }
 

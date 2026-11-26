@@ -166,3 +166,11 @@ test('prediction evaluation: hit, miss, and dropped game counts as miss', async 
   assert.equal(P.games[1].outcomes[7].result, 'miss');
   assert.equal(P.games[2].outcomes[7].result, 'miss');
 });
+
+test('only games 15 days old or younger can be Early Signal or Emerging', () => {
+  const base = { flags: [], discovery: { topPlaying: false }, growth24: null, daysOfHistory: 0 };
+  assert.equal(classifyGame({ m: { ...base, ageDays: 10, ccu: 3000 }, score: 70 }), 'Emerging');
+  assert.equal(classifyGame({ m: { ...base, ageDays: 10, ccu: 300 }, score: 60 }), 'Early Signal');
+  assert.equal(classifyGame({ m: { ...base, ageDays: 16, ccu: 3000 }, score: 70 }), 'Not trending');
+  assert.equal(classifyGame({ m: { ...base, ageDays: 40, ccu: 30000 }, score: 70 }), 'Accelerating');
+});
