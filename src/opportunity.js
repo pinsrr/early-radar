@@ -44,7 +44,7 @@ export function marketGaps({ games, mechanics, combos, genres }) {
   untested.sort((x, y) => y.demand - x.demand || x.existingGames - y.existingGames);
 
   // 2. Unspread mechanics: growing mechanic missing from a growing genre.
-  const genreRows = genres.filter(g => g.level === 'genre' && g.n >= 5);
+  const genreRows = genres.filter(g => g.level === 'genre' && g.n >= 10);   // small genres are too noisy
   const unspread = [];
   for (const m of mechanics.filter(m => m.momentum >= 55 && m.n >= 4)) {
     for (const g of genreRows) {
@@ -54,13 +54,16 @@ export function marketGaps({ games, mechanics, combos, genres }) {
     }
   }
   unspread.sort((a, b) => b.demand - a.demand);
+  // Variety: at most 2 rows per genre and 3 per mechanic.
+  const perG = {}, perM = {};
+  const unspreadVaried = unspread.filter(u => (perG[u.genre] = (perG[u.genre] || 0) + 1) <= 2 && (perM[u.mechanic] = (perM[u.mechanic] || 0) + 1) <= 3);
 
   // 3. Crowding: mechanics where new entrants are piling in.
   const crowding = mechanics.filter(m => m.adoption && m.adoption.newEntrants30 >= 8 && m.adoption.entrantTrend === 'Rising')
     .map(m => ({ mechanic: m.id, name: m.name, newEntrants30: m.adoption.newEntrants30, prev30: m.adoption.newEntrantsPrev30, bigGames: m.bigGames, note: 'Competition increasing: many new games adopting it this month' }))
     .sort((a, b) => b.newEntrants30 - a.newEntrants30);
 
-  return { untestedCombos: untested.slice(0, 25), unspreadMechanics: unspread.slice(0, 25), crowding, comboN: Object.fromEntries(comboN), pairCount };
+  return { untestedCombos: untested.slice(0, 25), unspreadMechanics: unspreadVaried.slice(0, 25), crowding, comboN: Object.fromEntries(comboN), pairCount };
 }
 
 // ---------- concepts ----------
