@@ -58,3 +58,16 @@ svg.chart { width: 100%; height: 220px; display: block; }
 .timeline div { position: relative; padding: 6px 0; }
 .timeline div::before { content: ""; position: absolute; left: -22px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent2); }
 .note { background: var(--panel2); border: 1px dashed var(--line); padding: 10px 14px; border-radius: 8px; color: var(--muted); line-height: 1.5; margin: 12px 0; }
+
+.concept { border-left: 3px solid var(--accent); margin-bottom: 14px; }
+.concept h3 { margin: 2px 0 6px; font-size: 17px; }
+.concept ol { margin: 6px 0; padding-left: 20px; }
+.concept .meta { color: var(--muted); font-size: 12px; }
+.concept dl { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin: 10px 0 0; }
+.concept dt { color: var(--muted); }
+.concept dd { margin: 0; }
+details.card summary { cursor: pointer; font-weight: 600; }
+.months { display: flex; gap: 6px; align-items: end; height: 70px; }
+.months div { flex: 1; background: var(--accent2); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; }
+.months span { position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--muted); }
+.rank { font-size: 28px; font-weight: 800; color: var(--accent); float: right; }

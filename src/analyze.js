@@ -7,11 +7,12 @@ import { buildPeers, baseComponents, finalScore, STAGES } from './scoring.js';
 import { tagGame, mineNamePatterns } from './mechanics.js';
 import { mechanicStats, comboStats, genreStats, patternStats, opportunityNotes } from './momentum.js';
 import { makeAlerts } from './alerts.js';
+import { buildOpportunities, competitorsFor } from './opportunity.js';
 
 const D = 864e5;
 const r2 = x => x == null ? null : Math.round(x * 100) / 100;
 
-export function analyze({ store, reg, rules, watch, now, outDir, runInfo }) {
+export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb }) {
   const series = store.loadSeries(now - 31 * D);
   const listings = store.loadDiscovery(now - 31 * D);
   const rows = [];
@@ -42,6 +43,13 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo }) {
     uacCountries: r.m.discovery.upAndComingCountries, uacRank: r.m.discovery.bestUpAndComingRank, history: Math.round(r.m.historyHours),
   })).sort((a, b) => b.score - a.score);
 
+  // Phase 3: gaps, concepts, competitor clusters. Also attaches adoption timelines to mechanics.
+  // Wrapped: a bug here must never stop collection or the rest of the dashboard.
+  let opportunities = null;
+  try { if (kb) opportunities = buildOpportunities({ games, mechanics, combos, genres, patterns, kbConfig: kb, now }); }
+  catch (e) { console.error('[opportunities] failed:', e); opportunities = { error: String(e?.stack || e), generatedAt: new Date(now).toISOString() }; }
+  const safeCompetitors = id => { try { return competitorsFor(games.find(x => x.id === id), games); } catch { return []; } };
+
   const prev = store.readJson('state.json', {});
   const newAlerts = makeAlerts({ games, mechanics, combos, prev, watch, nowIso: new Date(now).toISOString() });
   const alerts = [...newAlerts, ...(prev.alerts || [])].slice(0, 400);
@@ -54,6 +62,7 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo }) {
       meta: { ...r.g, sources: undefined, sourceCounts: r.g.sources },
       metrics: { ...r.m, discovery: r.m.discovery },
       tags: r.tags, breakdown: r.breakdown, score: r.score, stage: r.stage, peerKey: r.c.peerKey,
+      competitors: safeCompetitors(r.g.id),
       chart: chartSeries(series.get(r.g.id), now),
       listings: (listings.get(r.g.id) || []).slice(-200),
     }));
@@ -83,6 +92,7 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo }) {
   w('patterns.json', patterns);
   w('alerts.json', alerts);
   w('mechanic-names.json', mechNames);
+  if (opportunities) w('opportunities.json', opportunities);
 
   store.writeJson('state.json', {
     at: summary.generatedAt,

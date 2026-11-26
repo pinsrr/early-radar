@@ -18,6 +18,7 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const cfg = JSON.parse(fs.readFileSync(path.join(root, 'config/discovery.json'), 'utf8'));
 const rules = compileRules(JSON.parse(fs.readFileSync(path.join(root, 'config/mechanics.json'), 'utf8')));
 const watch = JSON.parse(fs.readFileSync(path.join(root, 'config/watchlist.json'), 'utf8'));
+const kb = JSON.parse(fs.readFileSync(path.join(root, 'config/mechanic-kb.json'), 'utf8'));
 const store = new Store(args.store || 'store');
 const outDir = args.out || 'site';
 fs.mkdirSync(path.join(outDir, 'data'), { recursive: true });
@@ -45,7 +46,7 @@ const runInfo = {
   countriesThisRun: d.countries, keywordsThisRun: d.keywords,
   requests: client.stats.requests, failedRequests: client.stats.failures, rateLimited: client.stats.rateLimited, errors: client.stats.errors,
 };
-const res = analyze({ store, reg, rules, watch, now, outDir, runInfo });
+const res = analyze({ store, reg, rules, watch, now, outDir, runInfo, kb });
 for (const f of fs.readdirSync(path.join(root, 'dashboard'))) fs.copyFileSync(path.join(root, 'dashboard', f), path.join(outDir, f));
 console.log(JSON.stringify({ ...runInfo, errors: runInfo.errors.length, analysed: res.games, mechanics: res.mechanics, newAlerts: res.newAlerts }));
 if (r.polled === 0 && !args.fixture) { console.error('No games polled: Roblox API unreachable or blocked.'); process.exit(1); }

@@ -114,7 +114,8 @@ const pages = {
   },
 
   async '/mechanic/:id'(id) {
-    const [mechs, games, combos, names] = await Promise.all(['mechanics.json', 'games.json', 'combos.json', 'mechanic-names.json'].map(load));
+    const [mechs, games, combos, names, opp] = await Promise.all(['mechanics.json', 'games.json', 'combos.json', 'mechanic-names.json', load('opportunities.json').catch(() => ({}))].map(x => typeof x === 'string' ? load(x) : x));
+    const card = (opp.cards || []).find(c => c.mechanic === id);
     const m = mechs.find(x => x.id === id);
     if (!m) return `<h1>${esc(names[id] || id)}</h1><p class="muted">No tracked games use this mechanic yet.</p>`;
     const gm = new Map(games.map(g => [g.id, g]));
@@ -126,6 +127,17 @@ const pages = {
     <div class="two"><div><h2>Score breakdown</h2><div class="card">${m.factors.map(f => `<div class="factor"><div>${esc(fl[f.key] || f.key)}</div>${f.max ? bar(f.points, f.max) : '<div class="muted">not scored</div>'}<div class="num">${f.max ? f.points + '/' + f.max : ''}</div>${f.note ? `<div class="n">${esc(f.note)}</div>` : ''}</div>`).join('')}</div></div>
     <div><h2>How it spread (first game per genre)</h2><div class="card timeline">${m.spread.map(s => `<div><b>${esc(s.genre)}</b> — <a href="#/game/${s.game}">${esc(s.name)}</a> <span class="muted">${(s.created || '').slice(0, 10)}</span></div>`).join('')}</div>
     <h2>Opportunity</h2><div class="card"><p><b>Strongest partner mechanics:</b> ${m.opportunity.strongestPartners.map(esc).join(', ') || '—'}</p><p><b>Untried combinations to explore:</b> ${m.opportunity.untriedPartners.map(esc).join(', ') || '—'}</p><p class="muted">${esc(m.opportunity.risk)}</p></div></div></div>
+    ${m.adoption ? `<h2>Adoption (games created per month)</h2><div class="card">${monthsBars(m.adoption)}</div>` : ''}
+    ${card ? `<h2>Opportunity card</h2><div class="card"><p>${esc(card.description)}</p><dl class="concept" style="display:grid;grid-template-columns:200px 1fr;gap:6px 12px">
+      <dt class="muted">Player growth evidence</dt><dd>${esc(card.playerGrowthEvidence)}</dd>
+      <dt class="muted">Genre growth</dt><dd>${card.associatedGenreGrowth.map(g => `${esc(g.genre)} ${g.medianGrowthPct}th pct`).join(' · ') || '—'}</dd>
+      <dt class="muted">Saturation</dt><dd>${esc(card.saturation)}</dd>
+      <dt class="muted">Difficulty to build</dt><dd>${card.difficulty ?? '—'}/5</dd>
+      <dt class="muted">Multiplayer potential</dt><dd>${card.multiplayer ?? '—'}/5</dd>
+      <dt class="muted">Combine with</dt><dd>${card.combineWith.map(esc).join(', ') || '—'}</dd>
+      <dt class="muted">Untried pairings</dt><dd>${card.untried.map(esc).join(', ') || '—'}</dd>
+      <dt class="muted">Risks</dt><dd>${esc(card.risks)}</dd></dl></div>
+      <h2>Three original concepts</h2>${card.concepts.map(c => conceptCard(c, names)).join('')}` : ''}
     <h2>Combinations with this mechanic</h2>${comboTable(cs)}
     <h2>Games using it</h2>${gameTable(m.games.map(i => gm.get(i)).filter(Boolean), names)}`;
   },
@@ -141,6 +153,34 @@ const pages = {
     return `<h1>Title Patterns</h1><p class="sub">Repeated title templates used by different creators (e.g. "Steal a …", "… For Animals"). On Roblox a copied title template is often the first visible sign of a spreading core loop — before any mechanic or genre label exists. Use these to spot <b>new mechanics</b> the keyword rules don't cover yet.</p>
     <table><thead><tr><th>Pattern</th><th class="num">Games</th><th class="num">Creators</th><th class="num">Median growth pct</th><th class="num">New (≤60d)</th><th class="num">Total CCU</th><th>Examples</th></tr></thead><tbody>
     ${p.map(x => `<tr><td><b>${esc(x.phrase)}</b></td><td class="num">${x.n}</td><td class="num">${x.creators}</td><td class="num">${x.medianGrowthPct}</td><td class="num">${Math.round(x.newShare * 100)}%</td><td class="num">${fmt(x.totalCcu)}</td><td>${x.games.slice(0, 4).map(i => gm.get(i)).filter(Boolean).map(g => `<a href="#/game/${g.id}">${esc(g.name)}</a>`).join(' · ')}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No repeated patterns yet.</td></tr>'}</tbody></table>`;
+  },
+
+
+  async '/opportunities'() {
+    const [o, names] = await Promise.all([load('opportunities.json'), load('mechanic-names.json')]);
+    if (o.error) return `<h1>Opportunity Finder</h1>${opError(o)}`;
+    const g = o.gaps;
+    return `<h1>Opportunity Finder</h1>
+    <p class="sub">Where promising gameplay systems are still uncommon. Concepts are rule-based starting points built from the tracker's evidence — original combinations, not copies of existing games. Opportunity score = demand (mechanic momentum + genre growth) + gap (how few games already do it) + feasibility for a small team + multiplayer potential.</p>
+    <h2>What I would build next</h2>
+    ${o.buildNext.map((c, i) => conceptCard(c, names, i + 1)).join('') || '<p class="muted">Not enough data yet.</p>'}
+    <h2>Market gaps</h2>
+    <div class="two"><div><h3>Untested combinations</h3><p class="muted">Both mechanics have momentum; almost no tracked game combines them.</p>
+    <table><thead><tr><th>Combination</th><th class="num">Demand</th><th class="num">Existing</th></tr></thead><tbody>${g.untestedCombos.map(u => `<tr><td>${u.mechanics.map(id => `<a href="#/mechanic/${id}">${esc(names[id])}</a>`).join(' + ')}</td><td class="num">${u.demand}</td><td class="num">${u.existingGames}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">None yet</td></tr>'}</tbody></table></div>
+    <div><h3>Mechanics missing from growing genres</h3><p class="muted">A rising mechanic that has barely reached a genre whose games are growing.</p>
+    <table><thead><tr><th>Mechanic</th><th>Into genre</th><th class="num">Genre growth</th><th class="num">Already there</th></tr></thead><tbody>${g.unspreadMechanics.map(u => `<tr><td><a href="#/mechanic/${u.mechanic}">${esc(u.mechanicName)}</a></td><td>${esc(u.genre)}</td><td class="num">${u.genreGrowthPct}</td><td class="num">${u.gamesWithMechanicInGenre}</td></tr>`).join('') || '<tr><td colspan=4 class="muted">None yet</td></tr>'}</tbody></table></div></div>
+    ${g.crowding.length ? `<h3>Getting crowded</h3><table><thead><tr><th>Mechanic</th><th class="num">New games (30d)</th><th class="num">Previous 30d</th><th class="num">Large games</th></tr></thead><tbody>${g.crowding.map(c => `<tr><td><a href="#/mechanic/${c.mechanic}">${esc(c.name)}</a></td><td class="num">${c.newEntrants30}</td><td class="num">${c.prev30}</td><td class="num">${c.bigGames}</td></tr>`).join('')}</tbody></table>` : ''}
+    <h2>All concepts</h2>
+    ${o.allConcepts.map(c => `<details class="card" style="margin-bottom:8px"><summary>${c.opportunityScore} · ${esc(c.title)} <span class="muted">(${c.mechanics.map(id => esc(names[id])).join(' + ')})</span></summary>${conceptCard(c, names)}</details>`).join('')}`;
+  },
+
+  async '/competitors'() {
+    const o = await load('opportunities.json');
+    if (o.error) return `<h1>Competitor Tracker</h1>${opError(o)}`;
+    const gl = g => g ? `<a href="#/game/${g.id}">${esc(g.name)}</a><div class="muted" style="font-size:12px">${fmt(g.ccu)} CCU · growth ${g.growthPct} · ${g.ageDays}d</div>` : '—';
+    return `<h1>Competitor Tracker</h1><p class="sub">Groups of similar games (same subgenre, or same mechanic combination). <b>Outgrowers</b> are small games growing much faster than the group's leader — the clearest early signals. Competition = how many new games joined in the last 30 days.</p>
+    <table><thead><tr><th>Group</th><th class="num">Games</th><th>Competition</th><th>Leader</th><th>Fastest grower</th><th>Newest</th><th>Outgrowers</th></tr></thead><tbody>
+    ${o.clusters.map(c => `<tr><td><b>${esc(c.name)}</b><div class="muted" style="font-size:12px">${esc(c.kind)} · ${fmt(c.totalCcu)} CCU</div></td><td class="num">${c.n}</td><td>${esc(c.competition)} <span class="muted">(${c.entrants30} new)</span></td><td>${gl(c.leader)}</td><td>${gl(c.fastest)}</td><td>${gl(c.newest)}</td><td>${c.outgrowers.map(g => `<a class="pill st-early" href="#/game/${g.id}">${esc(g.name)}</a>`).join('') || '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table>`;
   },
 
   async '/genres'() {
@@ -192,6 +232,7 @@ const pages = {
       ${row('History collected', Math.round(m.historyHours) + 'h · ' + m.snapshots + ' snapshots', 'derived')}
       ${row('Retention / revenue', 'not public', 'unavailable')}
     </tbody></table><p class="muted">Peer group: ${esc(d.peerKey)}</p></div></div>
+    <h2>Competitors</h2>${d.competitors?.length ? `<table><thead><tr><th>Game</th><th>Stage</th><th class="num">CCU</th><th class="num">Growth pct</th><th class="num">Age (d)</th><th class="num">Similarity</th></tr></thead><tbody>${d.competitors.map(c => `<tr><td><a href="#/game/${c.id}">${esc(c.name)}</a></td><td>${stage(c.stage)}</td><td class="num">${fmt(c.ccu)}</td><td class="num">${c.growthPct}</td><td class="num">${c.ageDays}</td><td class="num">${c.similarity}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No close competitors among tracked games.</p>'}
     <h2>Description</h2><div class="card" style="white-space:pre-wrap">${esc(g.desc)}</div>`;
   },
 
@@ -207,6 +248,30 @@ const pages = {
     <h2>Sources</h2><ul class="muted"><li>apis.roblox.com/explore-api — Up-and-Coming, Top Trending and other explore lists, per country</li><li>apis.roblox.com/search-api/omni-search — rotating keyword search, 3 pages deep</li><li>games.roblox.com/v1/games — CCU, visits, favourites, genre, created/updated</li><li>games.roblox.com/v1/games/votes — likes/dislikes</li><li>Not yet connected: YouTube, TikTok (Phase 4)</li></ul>`;
   },
 };
+
+
+function conceptCard(c, names, rank) {
+  const mlinks = c.mechanics.map(id => `<a class="pill tag" href="#/mechanic/${id}">${esc(names[id] || id)}</a>`).join('');
+  return `<div class="card concept">${rank ? `<div class="rank">#${rank}</div>` : ''}
+    <div class="meta">${esc(c.strategy)} · opportunity ${c.opportunityScore}/100 (demand ${c.scoreParts.demand}/40, gap ${c.scoreParts.gap}/30, feasibility ${c.scoreParts.feasibility}/20, multiplayer ${c.scoreParts.multiplayer}/10)</div>
+    <h3>${esc(c.title)} <span class="muted" style="font-size:12px;font-weight:400">working title</span></h3>
+    <div>${mlinks}${c.genre ? `<span class="pill">${esc(c.genre)}</span>` : ''}<span class="pill">difficulty ${c.difficulty}/5</span><span class="pill">multiplayer ${c.multiplayer}/5</span></div>
+    <p>${esc(c.pitch)}</p>
+    <dl>
+      <dt>Core loop</dt><dd><ol>${c.coreLoop.map(x => `<li>${esc(x)}</li>`).join('')}</ol></dd>
+      ${c.twist ? `<dt>Twist</dt><dd>${esc(c.twist)}</dd>` : ''}
+      <dt>Game feel</dt><dd>${esc(c.feel)}</dd>
+      <dt>Why now</dt><dd>${c.evidence.map(esc).join('<br>')}</dd>
+      <dt>Competition</dt><dd>${c.existingPair} tracked game(s) combine these mechanics${c.genre ? `, ${c.existingSame} in ${esc(c.genre)}` : ''}</dd>
+      <dt>Risks</dt><dd>${c.risks.length ? c.risks.map(esc).join('<br>') : '<span class="muted">None flagged</span>'}</dd>
+      <dt>First prototype</dt><dd>${esc(c.firstPrototype)}</dd>
+    </dl></div>`;
+}
+function monthsBars(a) {
+  const max = Math.max(1, ...a.months.map(m => m.games));
+  return `<div class="months">${a.months.map(m => `<div style="height:${m.games / max * 100}%" title="${m.games} games"><span>${m.month.slice(2)}</span></div>`).join('')}</div><p class="muted" style="margin-top:24px">New games using it: ${a.newEntrants30} in the last 30 days vs ${a.newEntrantsPrev30} the 30 days before (${a.entrantTrend}). Based on game creation dates.</p>`;
+}
+function opError(o) { return o?.error ? `<div class="note" style="color:var(--warn)">Opportunity analysis failed on the last run: ${esc(o.error.split('\n')[0])}</div>` : ''; }
 
 function mechTable(ms) {
   return `<table><thead><tr><th></th><th data-sort="m" class="num">Momentum</th><th data-sort="name">Mechanic</th><th>Stage</th><th class="num" data-sort="n">Games</th><th class="num" data-sort="cr">Creators</th><th class="num" data-sort="ge">Genres</th><th>Evidence</th><th>Competition</th></tr></thead><tbody>
