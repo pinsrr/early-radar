@@ -39,7 +39,7 @@ document.querySelectorAll('#nav i[data-i]').forEach(i => { i.innerHTML = `<svg v
 function observatory(games) {
   const W = 1000, H = 560, cx = 500, cy = 318, TILT = -13;
   const rings = [['Mainstream', 118, 70], ['Accelerating', 210, 110], ['Emerging', 305, 160], ['Early Signal', 400, 230]];
-  const pick = { 'Early Signal': 70, 'Emerging': 55, 'Accelerating': 30, 'Mainstream': 30 };
+  const pick = { 'Early Signal': 80, 'Emerging': 60, 'Accelerating': 22, 'Mainstream': 12 };
   let bodies = '';
   for (const [st, rx, period] of rings) {
     const ry = rx * 0.4;
@@ -55,7 +55,7 @@ function observatory(games) {
       const motion = REDUCED ? '' : `<animateMotion dur="${dur.toFixed(1)}s" repeatCount="indefinite" begin="-${(a / (Math.PI * 2) * dur).toFixed(1)}s" path="${path}"/>`;
       const pos = REDUCED ? `transform="translate(${cx + +px} ${cy + +py})"` : '';
       bodies += `<g class="body" data-id="${esc(g.id)}" tabindex="0" role="button" aria-label="${esc(g.name)}, ${esc(st)}, score ${g.score}" ${pos}>
-        <circle r="${(r * 2.6).toFixed(1)}" fill="${c}" opacity=".16" filter="url(#soft)"/>
+        <circle r="${(r * (st === 'Mainstream' ? 1.8 : 2.6)).toFixed(1)}" fill="${c}" opacity="${st === 'Mainstream' ? '.1' : '.16'}" filter="url(#soft)"/>
         <circle class="core" r="${r.toFixed(1)}" fill="${c}"/>${motion}<title>${esc(g.name)} — ${fmt(g.ccu)} players, score ${g.score}</title></g>`;
     }
   }
@@ -93,11 +93,11 @@ function inspectorHtml(g, names) {
     <div class="insp-big"><span class="v">${g.score}</span><span class="muted">Early Trend Score</span></div>
     <dl class="insp-rows">
       ${row('Players now', fmt(g.ccu))}
-      ${row('Change, 24 hours', g.change24 == null ? '—' : pct(g.change24))}
-      ${row('Growth vs peers', ordinal(g.growthPct) + ' percentile' + (g.growthKind === 'cold-start' ? ' (estimate)' : ''))}
+      ${row('24h change', g.change24 == null ? '—' : pct(g.change24))}
+      ${row('Peer growth', ordinal(g.growthPct) + ' pct' + (g.growthKind === 'cold-start' ? ' (est.)' : ''))}
       ${row('Age', g.ageDays + ' days')}
-      ${row('Up-and-Coming in', (g.uacCountries || 0) + ' countries')}
-      ${row('YouTube, 7 days', g.yt7d == null ? 'not checked' : g.yt7d + ' videos')}
+      ${row('Up-and-Coming', (g.uacCountries || 0) + (g.uacCountries === 1 ? ' country' : ' countries'))}
+      ${row('YouTube (7d)', g.yt7d == null ? 'not checked' : g.yt7d + ' videos')}
     </dl>
     <div>${g.tags.slice(0, 5).map(t => `<a class="pill tag" href="#/mechanic/${t}">${esc(names[t] || t)}</a>`).join('')}</div>
     <div class="insp-actions"><a class="btn primary" href="#/game/${g.id}">Open analysis</a><a class="btn" href="https://www.roblox.com/games/${g.placeId}" target="_blank" rel="noopener">Play on Roblox</a></div>`;

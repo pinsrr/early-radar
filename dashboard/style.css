@@ -163,7 +163,7 @@ details.card[open] summary { margin-bottom: 10px; }
 .months span { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--faint); font-family: var(--mono); }
 
 /* ---------- observatory hero (Early discoveries) ---------- */
-.observatory { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0; border: 1px solid var(--line); border-radius: 22px; overflow: hidden; margin: 6px 0 28px;
+.observatory { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 0; border: 1px solid var(--line); border-radius: 22px; overflow: hidden; margin: 6px 0 28px;
   background: radial-gradient(70% 90% at 42% 50%, #17205A 0%, #0B1026 62%, #080C1E 100%); }
 .obs-stage { position: relative; min-height: 470px; }
 .obs-stage svg { width: 100%; height: 100%; display: block; }
