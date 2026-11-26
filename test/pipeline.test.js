@@ -87,3 +87,36 @@ test('opportunity engine builds three distinct build-next concepts', async () =>
   assert.ok(o.gaps.untestedCombos.some(u => u.mechanics.includes('physics') && u.mechanics.includes('stealing')));
   for (let i = 1; i < o.buildNext.length; i++) assert.ok(o.buildNext[i - 1].opportunityScore >= o.buildNext[i].opportunityScore);
 });
+
+test('youtube: only counts videos that really name the game, and never leaks the key', async () => {
+  const { YouTubeClient, mentionsGame, nameTokens } = await import('../src/youtube.js');
+  const now = Date.parse('2026-11-26T00:00:00Z');
+  const vid = (id, title, hoursAgo) => ({ id: { videoId: id }, snippet: { title, description: '', publishedAt: new Date(now - hoursAgo * 36e5).toISOString() } });
+  const calls = [];
+  const fake = async url => {
+    calls.push(url);
+    if (url.includes('/search?')) return { ok: true, json: async () => ({ items: [vid('a', 'Chase a Storm roblox is insane', 5), vid('b', 'Storm chasing IRL vlog', 10), vid('c', 'CHASE A STORM new update!!', 80)] }) };
+    return { ok: true, json: async () => ({ items: [{ id: 'a', snippet: { title: 't', channelTitle: 'X', channelId: '1', publishedAt: new Date(now - 5 * 36e5).toISOString() }, statistics: { viewCount: '1000' } }, { id: 'c', snippet: { title: 't', channelTitle: 'Y', channelId: '2', publishedAt: new Date(now - 80 * 36e5).toISOString() }, statistics: { viewCount: '50' } }] }) };
+  };
+  const yc = new YouTubeClient({ key: 'SECRET', fetchImpl: fake, log: { log: () => {} } });
+  const r = await yc.checkGame({ name: 'Chase a Storm! [1-4 PLAYER!]' }, { now });
+  assert.equal(r.videos7d, 2);
+  assert.equal(r.videos48h, 1);
+  assert.equal(r.views7d, 1050);
+  assert.equal(yc.stats.unitsUsed, 101);
+  assert.ok(!mentionsGame('storm chasing vlog', nameTokens('Chase a Storm'), 'chase a storm'));
+  const bad = new YouTubeClient({ key: 'SECRET', fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({ error: { errors: [{ reason: 'quotaExceeded' }] } }) }), log: { log: () => {} } });
+  assert.equal(await bad.checkGame({ name: 'Test Game' }, { now }), null);
+  assert.ok(bad.stats.quotaExceeded);
+  assert.ok(!JSON.stringify(bad.stats).includes('SECRET'));
+});
+
+test('social timing labels social-first vs players-first', async () => {
+  const { socialTiming } = await import('../src/youtube.js');
+  const d0 = Date.parse('2026-11-20T00:00:00Z'), D = 864e5;
+  const yt = { g1: [{ t: new Date(d0).toISOString(), videos48h: 1 }, { t: new Date(d0 + D).toISOString(), videos48h: 5 }], g2: [{ t: new Date(d0).toISOString(), videos48h: 0 }, { t: new Date(d0 + 4 * D).toISOString(), videos48h: 6 }] };
+  const daily = new Map([['g1', [[d0, 100], [d0 + D, 110], [d0 + 3 * D, 300]]], ['g2', [[d0, 100], [d0 + D, 400], [d0 + 2 * D, 500]]]]);
+  const t = socialTiming(yt, daily);
+  assert.equal(t.socialFirst, 1);
+  assert.equal(t.playersFirst, 1);
+});

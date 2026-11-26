@@ -12,6 +12,7 @@ import { Store } from '../src/store.js';
 import { discover, refresh, prune } from '../src/collect.js';
 import { compileRules } from '../src/mechanics.js';
 import { analyze } from '../src/analyze.js';
+import { YouTubeClient, collectYouTube } from '../src/youtube.js';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, x, i, arr) => (x.startsWith('--') ? a.push([x.slice(2), arr[i + 1]?.startsWith('--') || arr[i + 1] == null ? true : arr[i + 1]]) : 0, a), []));
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -19,6 +20,7 @@ const cfg = JSON.parse(fs.readFileSync(path.join(root, 'config/discovery.json'),
 const rules = compileRules(JSON.parse(fs.readFileSync(path.join(root, 'config/mechanics.json'), 'utf8')));
 const watch = JSON.parse(fs.readFileSync(path.join(root, 'config/watchlist.json'), 'utf8'));
 const kb = JSON.parse(fs.readFileSync(path.join(root, 'config/mechanic-kb.json'), 'utf8'));
+const socialCfg = JSON.parse(fs.readFileSync(path.join(root, 'config/social.json'), 'utf8'));
 const store = new Store(args.store || 'store');
 const outDir = args.out || 'site';
 fs.mkdirSync(path.join(outDir, 'data'), { recursive: true });
@@ -39,6 +41,18 @@ const dropped = prune(reg, store.loadSeries(now - 8 * 864e5), cfg, now);
 store.saveRegistry(reg);
 store.rollupOld(now);
 
+// Phase 4: YouTube signals (only when the YOUTUBE_API_KEY secret is set).
+let socialInfo = { status: 'not connected', note: 'Add the YOUTUBE_API_KEY repository secret to switch this on.' };
+if (process.env.YOUTUBE_API_KEY && !args.fixture) {
+  try {
+    const yc = new YouTubeClient({ key: process.env.YOUTUBE_API_KEY });
+    const social = store.readJson('social.json', {});
+    const res = await collectYouTube({ client: yc, social, reg, prevState: store.readJson('state.json', {}), watch, cfg: socialCfg.youtube, now });
+    store.writeJson('social.json', social);
+    socialInfo = { status: yc.stats.quotaExceeded ? 'quota exceeded (resets daily)' : yc.stats.failures && !res.checked.length ? 'error' : 'connected', checkedThisRun: res.checked.length, waiting: res.queueLength, unitsUsedThisRun: yc.stats.unitsUsed, errors: yc.stats.errors.slice(0, 5) };
+  } catch (e) { socialInfo = { status: 'error', errors: [{ reason: String(e?.message || e) }] }; }
+}
+
 const runInfo = {
   lastRun: nowIso, mode: args.fixture ? 'fixture replay (real captured data)' : 'live',
   durationSec: Math.round((Date.now() - t0) / 1000),
@@ -46,7 +60,7 @@ const runInfo = {
   countriesThisRun: d.countries, keywordsThisRun: d.keywords,
   requests: client.stats.requests, failedRequests: client.stats.failures, rateLimited: client.stats.rateLimited, errors: client.stats.errors,
 };
-const res = analyze({ store, reg, rules, watch, now, outDir, runInfo, kb });
+const res = analyze({ store, reg, rules, watch, now, outDir, runInfo, kb, socialInfo });
 for (const f of fs.readdirSync(path.join(root, 'dashboard'))) fs.copyFileSync(path.join(root, 'dashboard', f), path.join(outDir, f));
 console.log(JSON.stringify({ ...runInfo, errors: runInfo.errors.length, analysed: res.games, mechanics: res.mechanics, newAlerts: res.newAlerts }));
 if (r.polled === 0 && !args.fixture) { console.error('No games polled: Roblox API unreachable or blocked.'); process.exit(1); }

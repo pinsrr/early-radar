@@ -42,6 +42,9 @@ export function marketGaps({ games, mechanics, combos, genres }) {
     if (n <= 2) untested.push({ id: k, mechanics: [a.id, b.id], name: `${a.name} + ${b.name}`, existingGames: n, demand: Math.round((a.momentum + b.momentum) / 2), note: n === 0 ? 'No tracked game combines these yet' : `Only ${n} tracked game(s) combine these` });
   }
   untested.sort((x, y) => y.demand - x.demand || x.existingGames - y.existingGames);
+  // Variety: each mechanic appears in at most 2 untested pairs.
+  const perU = {};
+  const untestedVaried = untested.filter(u => u.mechanics.every(m => (perU[m] || 0) < 2) && u.mechanics.every(m => (perU[m] = (perU[m] || 0) + 1)));
 
   // 2. Unspread mechanics: growing mechanic missing from a growing genre.
   const genreRows = genres.filter(g => g.level === 'genre' && g.n >= 10);   // small genres are too noisy
@@ -63,7 +66,7 @@ export function marketGaps({ games, mechanics, combos, genres }) {
     .map(m => ({ mechanic: m.id, name: m.name, newEntrants30: m.adoption.newEntrants30, prev30: m.adoption.newEntrantsPrev30, bigGames: m.bigGames, note: 'Competition increasing: many new games adopting it this month' }))
     .sort((a, b) => b.newEntrants30 - a.newEntrants30);
 
-  return { untestedCombos: untested.slice(0, 25), unspreadMechanics: unspreadVaried.slice(0, 25), crowding, comboN: Object.fromEntries(comboN), pairCount };
+  return { untestedCombos: untestedVaried.slice(0, 25), unspreadMechanics: unspreadVaried.slice(0, 25), crowding, comboN: Object.fromEntries(comboN), pairCount };
 }
 
 // ---------- concepts ----------

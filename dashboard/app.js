@@ -201,6 +201,37 @@ const pages = {
     return `<h1>Watchlist</h1><p class="sub">Click ★ on any game or mechanic. Saved in this browser only. To get alerts for a game, add its ID to <code>config/watchlist.json</code> in the repo.</p><h2>Games</h2>${gameTable(gs, names)}<h2>Mechanics</h2>${ms.length ? mechTable(ms) : '<p class="muted">None yet.</p>'}`;
   },
 
+
+  async '/reports'() {
+    const idx = await load('reports/index.json').catch(() => null);
+    if (!idx) return '<h1>Reports</h1><p class="muted">No reports yet. They appear after the next run.</p>';
+    const q = new URLSearchParams(location.hash.split('?')[1] || '');
+    const dFile = q.get('d') || idx.daily[0], wFile = q.get('w') || idx.weekly[0];
+    const [d, w, names] = await Promise.all([dFile ? load('reports/' + dFile) : null, wFile ? load('reports/' + wFile) : null, load('mechanic-names.json')]);
+    const sel = (list, cur, key) => `<select onchange="location.hash='#/reports?${key}='+this.value">${list.map(f => `<option ${f === cur ? 'selected' : ''} value="${esc(f)}">${esc(f.replace(/^(daily|weekly)-|\.json$/g, ''))}</option>`).join('')}</select>`;
+    const gl = g => `<a href="#/game/${g.id}">${esc(g.name)}</a>`;
+    const delta = x => x == null ? '' : ` <span style="color:${x >= 0 ? 'var(--accent)' : 'var(--bad)'}">${x >= 0 ? '+' : ''}${x}</span>`;
+    const li = arr => arr?.length ? `<ul>${arr.join('')}</ul>` : '<p class="muted">Nothing this time.</p>';
+    const daily = d ? `<div class="card"><div class="filters"><label>Daily report ${sel(idx.daily, dFile, 'd')}</label><span class="muted">${d.comparedWith ? 'compared with ' + esc(d.comparedWith) : 'first day: no comparison yet'} · ${d.newGamesToday} new games discovered</span></div>
+      <div class="two"><div><h3>Five emerging games</h3>${li(d.emergingGames.map(g => `<li>${gl(g)} — score ${g.score}, ${fmt(g.ccu)} CCU, ${g.ageDays}d old ${stage(g.stage)}</li>`))}
+      <h3>Unusual growth</h3>${li([...d.unusualGrowth.map(g => `<li>${gl(g)} ${pct(g.change24)} in 24h${g.flags?.length ? ' <span class="pill flag">' + esc(g.flags.join(', ')) + '</span>' : ''}</li>`), ...d.outgrowers.map(o => `<li>${gl(o)} out-growing ${esc(o.leader)} in ${esc(o.group)}</li>`)])}</div>
+      <div><h3>Five trending mechanics</h3>${li(d.trendingMechanics.map(m => `<li><a href="#/mechanic/${m.id}">${esc(m.name)}</a> — ${m.momentum}${delta(m.change)} ${stage(m.stage)}</li>`))}
+      <h3>New combinations</h3>${d.newCombinations == null ? '<p class="muted">Needs yesterday\'s snapshot.</p>' : li(d.newCombinations.map(c => `<li>${esc(c.name)} — ${c.n} games, ${c.growing} growing</li>`))}
+      <h3>Changes since yesterday</h3>${d.comparedWith ? li(d.changes.map(c => c.kind === 'game' ? `<li>${gl(c)}: ${esc(c.from)} → ${esc(c.to)}</li>` : `<li><a href="#/mechanic/${c.id}">${esc(c.name)}</a>: momentum ${c.from} → ${c.to}</li>`)) : '<p class="muted">Needs yesterday\'s snapshot.</p>'}</div></div>
+      <h3>Three development opportunities</h3>${li(d.opportunities.map(o => `<li><b>${esc(o.title)}</b> (${o.score}) — ${esc(o.pitch)}</li>`))}
+      <h3>Social vs player growth</h3><p>${d.social.games ? `Of ${d.social.games} games with enough data: YouTube came first for ${d.social.socialFirst}, players came first for ${d.social.playersFirst}, both together for ${d.social.together}. Small sample — treat as early evidence.` : '<span class="muted">Needs several days of YouTube checks and player history.</span>'}</p></div>` : '';
+    const weekly = w ? `<div class="card" style="margin-top:16px"><div class="filters"><label>Weekly report ${sel(idx.weekly, wFile, 'w')}</label><span class="muted">week of ${esc(w.weekOf || w.date)}${w.note ? ' · ' + esc(w.note) : ''}</span></div>
+      <h3>What I would build next</h3>${w.whatIWouldBuildNext.map(b => `<div class="card concept"><div class="rank">#${b.rank}</div><h3>${esc(b.title)}</h3><p>${esc(b.pitch)}</p><p class="muted">Evidence ${esc(b.ranking.evidence)} · Competition ${esc(b.ranking.competition)} · Feasibility ${esc(b.ranking.feasibility)} · Potential ${esc(b.ranking.potential)} · <a href="#/opportunities">full concept</a></p></div>`).join('') || '<p class="muted">Not enough data yet.</p>'}
+      <div class="two"><div><h3>Fastest-growing genres</h3>${li(w.fastestGenres.map(g => `<li>${esc(g.key)} — ${g.medianGrowthPct}th pct${delta(g.change)}</li>`))}
+      <h3>Fastest-growing mechanics</h3>${li(w.fastestMechanics.map(m => `<li><a href="#/mechanic/${m.id}">${esc(m.name)}</a> — ${m.momentum}${delta(m.change)}</li>`))}
+      <h3>Mechanics spreading across genres</h3>${li(w.spreadingMechanics.map(m => `<li><a href="#/mechanic/${m.id}">${esc(m.name)}</a> — ${m.genres} genres${m.genresBefore != null ? ` (was ${m.genresBefore})` : ''}</li>`))}
+      <h3>Trends becoming saturated</h3>${li(w.saturating.map(x => `<li><a href="#/mechanic/${x.id}">${esc(x.name)}</a> — ${esc(x.why)}</li>`))}</div>
+      <div><h3>Underserved concepts</h3>${li([...w.underserved.untestedCombos.map(u => `<li>${esc(u.name)} — ${esc(u.note)}</li>`), ...w.underserved.unspread.map(u => `<li>${esc(u.mechanicName)} → ${esc(u.genre)} (only ${u.gamesWithMechanicInGenre} there)</li>`)])}
+      <h3>Significant competitor activity</h3>${li(w.competitorActivity.map(c => `<li>${esc(c.name)} — ${c.entrants30} new games, ${esc(c.competition)}${c.outgrowers.length ? '; outgrowers: ' + c.outgrowers.map(esc).join(', ') : ''}</li>`))}
+      <h3>Predictions worth testing</h3>${li(w.predictionsToTest.map(p => `<li>${gl(p)}: ${esc(p.claim)} <span class="muted">(${esc(p.basis)})</span></li>`))}<p class="muted">Phase 5 will store and score these automatically.</p></div></div></div>` : '';
+    return `<h1>Reports</h1><p class="sub">Daily and weekly intelligence summaries. A new daily report is written every day, and the weekly one covers Monday to Sunday. The last 30 daily reports are kept.</p>${daily}${weekly}`;
+  },
+
   async '/alerts'() {
     return `<h1>Alerts</h1><p class="sub">What changed, why it matters, and how confident the system is. Each links to its supporting games.</p>${alertList(await load('alerts.json'))}`;
   },
@@ -232,6 +263,7 @@ const pages = {
       ${row('History collected', Math.round(m.historyHours) + 'h · ' + m.snapshots + ' snapshots', 'derived')}
       ${row('Retention / revenue', 'not public', 'unavailable')}
     </tbody></table><p class="muted">Peer group: ${esc(d.peerKey)}</p></div></div>
+    <h2>Social (YouTube)</h2>${m.social ? `<div class="card"><p><b>${m.social.videos7d}</b> videos naming this game in the last 7 days (${m.social.videos48h} in 48h) from <b>${m.social.channels}</b> channels, ${fmt(m.social.views7d)} views total${m.social.hitLimit ? ' — hit the search limit, real number is higher' : ''}. <span class="label-obs">observed</span> · checked ${ago(m.social.t)}, ${m.social.checks} check(s) so far.</p>${m.social.top ? `<p>Top video: <a href="${esc(m.social.top.url)}" target="_blank" rel="noopener">${esc(m.social.top.title)}</a> by ${esc(m.social.top.channel)} (${fmt(m.social.top.views)} views)</p>` : ''}${m.social.history.length >= 2 ? lineChart(m.social.history.map(h => [Date.parse(h[0]), h[1]]), { label: 'videos in last 7 days' }) : ''}</div>` : '<p class="muted">Not checked on YouTube yet. Early games are checked first, about 96 per day.</p>'}
     <h2>Competitors</h2>${d.competitors?.length ? `<table><thead><tr><th>Game</th><th>Stage</th><th class="num">CCU</th><th class="num">Growth pct</th><th class="num">Age (d)</th><th class="num">Similarity</th></tr></thead><tbody>${d.competitors.map(c => `<tr><td><a href="#/game/${c.id}">${esc(c.name)}</a></td><td>${stage(c.stage)}</td><td class="num">${fmt(c.ccu)}</td><td class="num">${c.growthPct}</td><td class="num">${c.ageDays}</td><td class="num">${c.similarity}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No close competitors among tracked games.</p>'}
     <h2>Description</h2><div class="card" style="white-space:pre-wrap">${esc(g.desc)}</div>`;
   },
@@ -243,9 +275,10 @@ const pages = {
     <div class="card"><p><b>Last run:</b> ${esc(q.lastRun)} (${esc(q.mode)}), ${q.durationSec}s · ${q.requests} requests · ${q.failedRequests} failed · ${q.rateLimited} rate-limited</p>
     <p><b>This run:</b> ${q.listingsSeen} list entries, ${q.newGamesFound} new games, ${q.gamesPolled}/${q.gamesRequested} polled, ${q.droppedInactive} dropped as inactive. Countries: ${(q.countriesThisRun || []).join(', ')}. Keywords: ${(q.keywordsThisRun || []).join(', ')}.</p>
     ${q.errors?.length ? `<p style="color:var(--warn)">Errors: ${q.errors.map(e => esc(e.url + ' ' + e.status)).join('; ')}</p>` : ''}</div>
+    <div class="card"><p><b>YouTube:</b> ${esc(sum.social?.youtube?.status || 'not connected')}${sum.social?.youtube?.checkedThisRun != null ? ` · ${sum.social.youtube.checkedThisRun} games checked this run, ${sum.social.youtube.waiting} waiting, ${sum.social.youtube.unitsUsedThisRun} quota units used` : ''} · ${sum.social?.youtubeGamesTracked || 0} games with YouTube data${sum.social?.youtube?.note ? `<br><span class="muted">${esc(sum.social.youtube.note)}</span>` : ''}${(sum.social?.youtube?.errors || []).length ? `<br><span style="color:var(--warn)">${sum.social.youtube.errors.map(e => esc((e.path || '') + ' ' + (e.status || '') + ' ' + (e.reason || ''))).join('; ')}</span>` : ''}</p><p><b>TikTok:</b> ${esc(sum.social?.tiktok || 'unavailable')}</p></div>
     <div class="note">${esc(q.note)}<br><br>${esc(q.baselineNote)}</div>
     <h2>Labels</h2><p><span class="label-obs">observed</span> read from Roblox · <span class="label-der">derived</span> computed from our snapshots · <span class="label-inf">inferred</span> estimate with a stated assumption · <span class="label-na">unavailable</span> not public</p>
-    <h2>Sources</h2><ul class="muted"><li>apis.roblox.com/explore-api — Up-and-Coming, Top Trending and other explore lists, per country</li><li>apis.roblox.com/search-api/omni-search — rotating keyword search, 3 pages deep</li><li>games.roblox.com/v1/games — CCU, visits, favourites, genre, created/updated</li><li>games.roblox.com/v1/games/votes — likes/dislikes</li><li>Not yet connected: YouTube, TikTok (Phase 4)</li></ul>`;
+    <h2>Sources</h2><ul class="muted"><li>apis.roblox.com/explore-api — Up-and-Coming, Top Trending and other explore lists, per country</li><li>apis.roblox.com/search-api/omni-search — rotating keyword search, 3 pages deep</li><li>games.roblox.com/v1/games — CCU, visits, favourites, genre, created/updated</li><li>games.roblox.com/v1/games/votes — likes/dislikes</li><li>www.googleapis.com/youtube/v3 — search + video statistics (needs YOUTUBE_API_KEY; data deleted after 30 days per YouTube terms)</li><li>TikTok — no public API; not used</li></ul>`;
   },
 };
 

@@ -8,11 +8,13 @@ import { tagGame, mineNamePatterns } from './mechanics.js';
 import { mechanicStats, comboStats, genreStats, patternStats, opportunityNotes } from './momentum.js';
 import { makeAlerts } from './alerts.js';
 import { buildOpportunities, competitorsFor } from './opportunity.js';
+import { updateTrendHistory, dailyReport, weeklyReport, publishReports } from './reports.js';
+import { socialTiming } from './youtube.js';
 
 const D = 864e5;
 const r2 = x => x == null ? null : Math.round(x * 100) / 100;
 
-export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb }) {
+export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb, socialInfo }) {
   const series = store.loadSeries(now - 31 * D);
   const listings = store.loadDiscovery(now - 31 * D);
   const rows = [];
@@ -20,6 +22,12 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb }) 
     const s = series.get(g.id);
     if (!g.active || !s?.length || !g.created) continue;
     rows.push({ g, m: gameMetrics(g, s, listings.get(g.id) || [], now), tags: tagGame(g, rules) });
+  }
+  const social = store.readJson('social.json', {});
+  const yt = social.youtube || {};
+  for (const r of rows) {
+    const h = yt[r.g.id];
+    if (h?.length) { const last = h.at(-1); r.m.social = { ...last, checks: h.length, prevVideos48h: h.length > 1 ? h.at(-2).videos48h : null, history: h.map(x => [x.t, x.videos7d, x.videos48h, x.views7d]) }; }
   }
   const peersOf = buildPeers(rows);
   for (const r of rows) baseComponents(r, peersOf, now);
@@ -41,6 +49,7 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb }) 
     growthKind: r.growth.kind, growthPct: Math.round(r.c.growthPct * 100), peerKey: r.c.peerKey,
     score: r.score, stage: r.stage, tags: r.tags.map(t => t.id), flags: r.m.flags.map(f => f.type),
     uacCountries: r.m.discovery.upAndComingCountries, uacRank: r.m.discovery.bestUpAndComingRank, history: Math.round(r.m.historyHours),
+    yt7d: r.m.social?.videos7d ?? null, yt48h: r.m.social?.videos48h ?? null, ytChannels: r.m.social?.channels ?? null,
   })).sort((a, b) => b.score - a.score);
 
   // Phase 3: gaps, concepts, competitor clusters. Also attaches adoption timelines to mechanics.
@@ -49,6 +58,23 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb }) 
   try { if (kb) opportunities = buildOpportunities({ games, mechanics, combos, genres, patterns, kbConfig: kb, now }); }
   catch (e) { console.error('[opportunities] failed:', e); opportunities = { error: String(e?.stack || e), generatedAt: new Date(now).toISOString() }; }
   const safeCompetitors = id => { try { return competitorsFor(games.find(x => x.id === id), games); } catch { return []; } };
+
+  // Phase 4: does social interest lead or follow player growth? (daily average CCU per YouTube-checked game)
+  const dailyCcu = new Map();
+  for (const id of Object.keys(yt)) {
+    const by = new Map();
+    for (const r of series.get(id) || []) { const d = Math.floor(r[0] / D) * D; const e = by.get(d) || [0, 0]; e[0] += r[1]; e[1]++; by.set(d, e); }
+    dailyCcu.set(id, [...by].sort((a, b) => a[0] - b[0]).map(([d, [sum, n]]) => [d, sum / n]));
+  }
+  const timing = socialTiming(yt, dailyCcu);
+
+  // Phase 4: daily + weekly reports (wrapped so a report bug never breaks collection).
+  try {
+    const h = updateTrendHistory(store, now, { games, mechanics, combos, genres });
+    const today = new Date(now).toISOString().slice(0, 10);
+    const ctx = { now, h, games, mechanics, combos, genres, opportunities: opportunities?.error ? null : opportunities, clusters: opportunities?.clusters, timing, newGamesToday: games.filter(g => (g.firstSeen || '').slice(0, 10) === today).length };
+    publishReports(store, outDir, dailyReport(ctx), weeklyReport(ctx));
+  } catch (e) { console.error('[reports] failed:', e); }
 
   const prev = store.readJson('state.json', {});
   const newAlerts = makeAlerts({ games, mechanics, combos, prev, watch, nowIso: new Date(now).toISOString() });
@@ -75,6 +101,7 @@ export function analyze({ store, reg, rules, watch, now, outDir, runInfo, kb }) 
     trackedGames: games.length, registryGames: Object.keys(reg.games).length, runs: reg.runs,
     stageCounts,
     historyHoursMedian: hist.length ? hist[hist.length >> 1] : 0,
+    social: { youtube: socialInfo || { status: 'not connected' }, youtubeGamesTracked: Object.keys(yt).length, tiktok: 'unavailable: no public API', timing },
     dataQuality: {
       ...runInfo,
       note: 'All player, visit, favourite and vote numbers are observed from public Roblox endpoints at collection time. Growth needs our own history: anything marked cold-start is an estimate until 48h of snapshots exist. Session length is inferred. Retention and revenue are not available from public sources and are not shown.',

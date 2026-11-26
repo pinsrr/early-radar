@@ -55,10 +55,13 @@ export function baseComponents(r, peersOf, now = Date.now()) {
   let revival = false;
   if (age > 120 && m.hoursSinceUpdate != null && m.hoursSinceUpdate < 72 && (m.growth24 ?? 0) > 0.3) { fresh = 0.7; revival = true; }
   const d = m.discovery;
-  const disc = clamp(Math.min(1, d.upAndComingCountries / 4) * 0.6 + (d.topTrending ? 0.2 : 0) + (d.firstUpAndComing && now - Date.parse(d.firstUpAndComing) < 2 * 864e5 ? 0.2 : 0));
+  let disc = clamp(Math.min(1, d.upAndComingCountries / 4) * 0.6 + (d.topTrending ? 0.2 : 0) + (d.firstUpAndComing && now - Date.parse(d.firstUpAndComing) < 2 * 864e5 ? 0.2 : 0));
+  // YouTube (when connected and this game was checked): ~30 recent videos = full marks.
+  const social = m.social ? clamp(Math.log10(m.social.videos7d + 1) / 1.5) : null;
+  if (social != null) disc = 0.65 * disc + 0.35 * social;
   const small = 1 - clamp((Math.log10(m.ccu + 1) - 2) / 3.3);
   const early = small * (growthPct >= 0.5 ? 1 : 0.3);
-  r.c = { growthPct, accel, consistency: m.consistency ?? null, engage: engage.length ? engage.reduce((a, b) => a + b) / engage.length : null, fresh, revival, disc, early, peerKey: peers.key };
+  r.c = { social, growthPct, accel, consistency: m.consistency ?? null, engage: engage.length ? engage.reduce((a, b) => a + b) / engage.length : null, fresh, revival, disc, early, peerKey: peers.key };
   return r;
 }
 
@@ -76,7 +79,7 @@ export function finalScore(r, mechMomentum) {
     ['Freshness', 'fresh', c.fresh, c.revival ? 'older game reviving after a recent update' : `${Math.round(m.ageDays)} days old`],
     ['Earliness (small + growing)', 'early', c.early, `${m.ccu.toLocaleString('en')} CCU`],
     ['Mechanic momentum', 'mechanic', mech, r.tags.length ? 'best momentum among its mechanics' : 'no mechanics tagged'],
-    ['Discovery lists', 'disc', c.disc, `Up-and-Coming in ${m.discovery.upAndComingCountries} countries` + (m.discovery.topTrending ? ', Top Trending' : '')],
+    ['Discovery lists & social', 'disc', c.disc, `Up-and-Coming in ${m.discovery.upAndComingCountries} countries` + (m.discovery.topTrending ? ', Top Trending' : '') + (m.social ? `; ${m.social.videos7d} YouTube videos in 7 days (${m.social.channels} channels)` : '; YouTube not checked yet')],
   ].map(([name, k, v, note]) => ({ name, max: W[k], points: Math.round(W[k] * (v ?? 0.5) * 10) / 10, neutral: v == null, note }));
   let score = parts.reduce((s, p) => s + p.points, 0);
   const penalties = [];

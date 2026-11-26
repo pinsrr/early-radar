@@ -44,12 +44,17 @@ export function scoreGroup(rows, members, has, now, opts = {}) {
     unsaturated: 1 - saturation,
   };
   const W = { adoption: 8, growth: 18, independent: 8, recency: 10, acceleration: 8, lift: 16, retention: 10, crossGenre: 12, unsaturated: 10 };
+  // Social attention: share of checked games with 3+ YouTube videos in 7 days. Needs 3+ checked games.
+  const checked = members.filter(r => r.m.social);
+  if (checked.length >= 3) { W.social = 8; f.social = checked.filter(r => r.m.social.videos7d >= 3).length / checked.length; }
+  const totalMax = Object.values(W).reduce((a, b) => a + b, 0);
   const factors = Object.entries(W).map(([k, w]) => ({ key: k, max: w, points: Math.round(w * f[k] * 10) / 10 }));
-  factors.push({ key: 'social', max: 0, points: 0, note: 'YouTube/TikTok signals not connected yet (Phase 4)' });
+  if (!W.social) factors.push({ key: 'social', max: 0, points: 0, note: checked.length ? `YouTube checked for ${checked.length} game(s); needs 3 to score` : 'YouTube not connected or no games checked yet (TikTok: no public API)' });
+  else factors.at(-1).note = `${checked.filter(r => r.m.social.videos7d >= 3).length} of ${checked.length} checked games have 3+ YouTube videos this week`;
   // Small-sample shrinkage: one or two games cannot make a trend.
   const shrink = Math.sqrt(clamp(n / 4));
   if (shrink < 1) factors.push({ key: 'sampleSize', max: 0, points: 0, note: `only ${n} game(s): score scaled by ${shrink.toFixed(2)}` });
-  const momentum = Math.round(factors.reduce((s, x) => s + x.points, 0) * shrink);
+  const momentum = Math.round(factors.reduce((s, x) => s + x.points, 0) * 100 / totalMax * shrink);
   const history = median(members.map(r => r.m.daysOfHistory)) ?? 0;
   const evidence = n < 3 ? 'insufficient data'
     : n >= 4 && creators >= 3 && genresAll >= 2 && lift > 0.1 && growing.length / n >= 0.4 ? 'plausible driver'
