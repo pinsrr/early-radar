@@ -11,6 +11,118 @@ const stage = s => `<span class="pill ${stCls(s)}">${esc(s)}</span>`;
 const bar = (v, max = 100, color) => `<div class="bar"><i style="width:${Math.max(0, Math.min(100, v / max * 100))}%;${color ? 'background:' + color : ''}"></i></div>`;
 const robloxUrl = g => `https://www.roblox.com/games/${g.placeId}`;
 
+const STAGE_COLOR = { 'Early Signal': '#9CC8FF', 'Emerging': '#5EE6D0', 'Accelerating': '#FFC266', 'Mainstream': '#FF7A6B', 'Saturated or Declining': '#8A6F9E' };
+const REDUCED = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
+const ordinal = n => { const v = n % 100; return n + (v >= 11 && v <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'); };
+const hashN = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; };
+
+// Stroke icons for the navigation rail.
+const ICONS = {
+  radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>',
+  star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  orbit: '<circle cx="12" cy="12" r="2.5"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(-25 12 12)"/>',
+  link: '<circle cx="8" cy="12" r="4"/><circle cx="16" cy="12" r="4"/>',
+  text: '<path d="M5 6h14M5 12h10M5 18h7"/>',
+  layers: '<path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/>',
+  users: '<circle cx="9" cy="9" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.5a3.5 3.5 0 010 7M18 14.3c1.8.9 3 2.9 3 5.7"/>',
+  bell: '<path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 004 0"/>',
+  doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+};
+document.querySelectorAll('#nav i[data-i]').forEach(i => { i.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[i.dataset.i] || ''}</svg>`; });
+
+// Orbit radar: stages as orbits (outer = earliest), games as glowing bodies sized by players.
+function observatory(games) {
+  const W = 1000, H = 560, cx = 500, cy = 318, TILT = -13;
+  const rings = [['Mainstream', 118, 70], ['Accelerating', 210, 110], ['Emerging', 305, 160], ['Early Signal', 400, 230]];
+  const pick = { 'Early Signal': 70, 'Emerging': 55, 'Accelerating': 30, 'Mainstream': 30 };
+  let bodies = '';
+  for (const [st, rx, period] of rings) {
+    const ry = rx * 0.4;
+    const list = games.filter(g => g.stage === st).slice(0, pick[st]);
+    for (const g of list) {
+      const a = hashN(g.id) * Math.PI * 2;
+      const wob = 1 + (hashN(g.id + 'r') - 0.5) * 0.14;
+      const r = Math.min(13, 2.2 + Math.sqrt(g.ccu) / 20);
+      const c = STAGE_COLOR[st];
+      const px = (rx * wob * Math.cos(a)).toFixed(1), py = (ry * wob * Math.sin(a)).toFixed(1);
+      const path = `M ${cx + rx * wob} ${cy} A ${rx * wob} ${ry * wob} 0 1 1 ${cx - rx * wob} ${cy} A ${rx * wob} ${ry * wob} 0 1 1 ${cx + rx * wob} ${cy}`;
+      const dur = period * (0.9 + hashN(g.id + 'p') * 0.2);
+      const motion = REDUCED ? '' : `<animateMotion dur="${dur.toFixed(1)}s" repeatCount="indefinite" begin="-${(a / (Math.PI * 2) * dur).toFixed(1)}s" path="${path}"/>`;
+      const pos = REDUCED ? `transform="translate(${cx + +px} ${cy + +py})"` : '';
+      bodies += `<g class="body" data-id="${esc(g.id)}" tabindex="0" role="button" aria-label="${esc(g.name)}, ${esc(st)}, score ${g.score}" ${pos}>
+        <circle r="${(r * 2.6).toFixed(1)}" fill="${c}" opacity=".16" filter="url(#soft)"/>
+        <circle class="core" r="${r.toFixed(1)}" fill="${c}"/>${motion}<title>${esc(g.name)} — ${fmt(g.ccu)} players, score ${g.score}</title></g>`;
+    }
+  }
+  const ringSvg = rings.map(([st, rx]) => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${rx * 0.4}" fill="none" stroke="${STAGE_COLOR[st]}" stroke-opacity=".28" stroke-width="1" stroke-dasharray="${st === 'Early Signal' ? '2 5' : 'none'}"/>
+    <text x="${cx + rx * Math.cos(-0.5) + 6}" y="${cy + rx * 0.4 * Math.sin(-0.5) - 6}" fill="${STAGE_COLOR[st]}" fill-opacity=".75" font-size="12" font-family="IBM Plex Sans, sans-serif">${st}</text>`).join('');
+  const shown = games.filter(g => ['Early Signal', 'Emerging'].includes(g.stage)).length;
+  return `<section class="observatory" aria-label="Orbit radar">
+    <div class="obs-stage">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" id="orbits" role="img" aria-label="Games arranged on orbits by stage">
+        <defs>
+          <filter id="soft" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="5"/></filter>
+          <radialGradient id="sun"><stop offset="0" stop-color="#FFF4D6"/><stop offset=".35" stop-color="#FFC266"/><stop offset="1" stop-color="#FF7A6B" stop-opacity="0"/></radialGradient>
+        </defs>
+        <g transform="rotate(${TILT} ${cx} ${cy})">
+          <circle cx="${cx}" cy="${cy}" r="56" fill="url(#sun)" opacity=".55"/>
+          <circle cx="${cx}" cy="${cy}" r="9" fill="#FFF4D6"/>
+          ${ringSvg}
+          ${bodies}
+        </g>
+      </svg>
+      <div class="obs-head"><div><h1>Early discoveries</h1><p>Every rising game on one sky. New signals circle the outer orbit; the closer to the core, the more mainstream. Size shows players right now. Pick a body to inspect it.</p></div></div>
+      <div class="obs-legend">${rings.slice().reverse().map(([st]) => `<span style="--c:${STAGE_COLOR[st]}">${st}</span>`).join('')}</div>
+      <div class="obs-count"><div class="v">${shown.toLocaleString('en')}</div><div class="l">early games in view</div></div>
+    </div>
+    <aside class="inspector" id="inspector" aria-live="polite"></aside>
+  </section>`;
+}
+
+function inspectorHtml(g, names) {
+  if (!g) return '<p class="hint">Select a body on the radar to inspect it.</p>';
+  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  return `<div>${stage(g.stage)}</div>
+    <h2>${esc(g.name)}</h2>
+    <div class="by">${esc(g.creator)}<br>${esc(g.genre)}${g.subgenre ? ' › ' + esc(g.subgenre) : ''}</div>
+    <div class="insp-big"><span class="v">${g.score}</span><span class="muted">Early Trend Score</span></div>
+    <dl class="insp-rows">
+      ${row('Players now', fmt(g.ccu))}
+      ${row('Change, 24 hours', g.change24 == null ? '—' : pct(g.change24))}
+      ${row('Growth vs peers', ordinal(g.growthPct) + ' percentile' + (g.growthKind === 'cold-start' ? ' (estimate)' : ''))}
+      ${row('Age', g.ageDays + ' days')}
+      ${row('Up-and-Coming in', (g.uacCountries || 0) + ' countries')}
+      ${row('YouTube, 7 days', g.yt7d == null ? 'not checked' : g.yt7d + ' videos')}
+    </dl>
+    <div>${g.tags.slice(0, 5).map(t => `<a class="pill tag" href="#/mechanic/${t}">${esc(names[t] || t)}</a>`).join('')}</div>
+    <div class="insp-actions"><a class="btn primary" href="#/game/${g.id}">Open analysis</a><a class="btn" href="https://www.roblox.com/games/${g.placeId}" target="_blank" rel="noopener">Play on Roblox</a></div>`;
+}
+
+function wireObservatory(games, names) {
+  const svg = document.getElementById('orbits'), insp = document.getElementById('inspector');
+  if (!svg || !insp) return;
+  const byId = new Map(games.map(g => [g.id, g]));
+  const select = id => {
+    svg.querySelectorAll('.body.sel').forEach(b => b.classList.remove('sel'));
+    const el = svg.querySelector(`.body[data-id="${CSS.escape(id)}"]`);
+    if (el) el.classList.add('sel');
+    insp.innerHTML = inspectorHtml(byId.get(id), names);
+  };
+  svg.addEventListener('click', e => { const b = e.target.closest('.body'); if (b) select(b.dataset.id); });
+  svg.addEventListener('keydown', e => { const b = e.target.closest('.body'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(b.dataset.id); } });
+  // Hold still while the pointer is over the sky, so bodies are easy to click.
+  if (!REDUCED && svg.pauseAnimations) { svg.addEventListener('mouseenter', () => svg.pauseAnimations()); svg.addEventListener('mouseleave', () => svg.unpauseAnimations()); svg.addEventListener('focusin', () => svg.pauseAnimations()); }
+  const first = games.find(g => ['Early Signal', 'Emerging'].includes(g.stage));
+  insp.innerHTML = inspectorHtml(first, names);
+  if (first) svg.querySelector(`.body[data-id="${CSS.escape(first.id)}"]`)?.classList.add('sel');
+}
+
+
 async function load(name) {
   if (!S.cache[name]) S.cache[name] = fetch(`data/${name}`, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(name); return r.json(); });
   return S.cache[name];
@@ -58,17 +170,30 @@ function gameTable(games, names, { limit = 200 } = {}) {
   </tbody></table>${games.length > limit ? `<p class="muted">Showing ${limit} of ${games.length}.</p>` : ''}`;
 }
 
-function lineChart(points, { y = 1, label = 'CCU' } = {}) {
-  if (!points || points.length < 2) return `<div class="note">Not enough history for a chart yet. Each run adds a point; charts fill in after a few hours.</div>`;
-  const W = 900, Hh = 220, P = 36;
+function lineChart(points, { y = 1, label = 'CCU', color = '#9CC8FF' } = {}) {
+  if (!points || points.length < 2) return `<div class="note">Not enough history for a chart yet. Each run adds a point; the chart fills in over a few hours.</div>`;
+  const W = 900, Hh = 240, L = 44, R = 12, T = 26, B = 26;
   const xs = points.map(p => p[0]), ys = points.map(p => p[y]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y1 = Math.max(...ys) * 1.1 || 1;
-  const X = t => P + (t - x0) / (x1 - x0 || 1) * (W - P - 10), Y = v => Hh - 24 - v / y1 * (Hh - 40);
-  const d = points.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[y]).toFixed(1)}`).join('');
-  const ticks = [0, 0.5, 1].map(f => `<text x="4" y="${Y(y1 * f / 1.1) + 4}" fill="#8a96aa" font-size="11">${fmt(y1 * f / 1.1)}</text><line x1="${P}" x2="${W}" y1="${Y(y1 * f / 1.1)}" y2="${Y(y1 * f / 1.1)}" stroke="#263043"/>`).join('');
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), yMax = Math.max(...ys) * 1.15 || 1;
+  const X = t => L + (t - x0) / (x1 - x0 || 1) * (W - L - R), Y = v => Hh - B - v / yMax * (Hh - T - B);
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[y]).toFixed(1)}`).join('');
+  const area = `${line}L${X(x1).toFixed(1)},${Hh - B}L${X(x0).toFixed(1)},${Hh - B}Z`;
+  const id = 'g' + Math.random().toString(36).slice(2, 8);
+  const peak = points.reduce((m, p) => p[y] > m[y] ? p : m, points[0]);
+  const grid = [0.25, 0.5, 0.75, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${Y(yMax / 1.15 * f)}" y2="${Y(yMax / 1.15 * f)}" stroke="#222C5C" stroke-dasharray="2 4"/><text x="${L - 8}" y="${Y(yMax / 1.15 * f) + 4}" text-anchor="end">${fmt(yMax / 1.15 * f)}</text>`).join('');
   const dl = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' });
-  return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">${ticks}<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/>
-    <text x="${P}" y="${Hh - 6}" fill="#8a96aa" font-size="11">${dl(x0)}</text><text x="${W - 10}" y="${Hh - 6}" fill="#8a96aa" font-size="11" text-anchor="end">${dl(x1)} · ${label}</text></svg>`;
+  const px = X(peak[0]), py = Y(peak[y]);
+  return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="${esc(label)} over time, peak ${fmt(peak[y])}">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".45"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient>
+    <filter id="${id}b" x="-10%" y="-50%" width="120%" height="200%"><feGaussianBlur stdDeviation="4"/></filter></defs>
+    ${grid}
+    <path d="${area}" fill="url(#${id})"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="5" opacity=".35" filter="url(#${id}b)"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="1.8"/>
+    <line x1="${px}" x2="${px}" y1="${py}" y2="${Hh - B}" stroke="${color}" stroke-opacity=".5" stroke-dasharray="2 3"/>
+    <circle cx="${px}" cy="${py}" r="4" fill="${color}"/><circle cx="${px}" cy="${py}" r="9" fill="${color}" opacity=".25"/>
+    <text x="${Math.min(px, W - 90)}" y="${py - 12}" fill="${color}" style="fill:${color}" font-size="12">peak ${fmt(peak[y])}</text>
+    <text x="${L}" y="${Hh - 6}">${dl(x0)}</text><text x="${W - R}" y="${Hh - 6}" text-anchor="end">${dl(x1)} · ${esc(label)}</text></svg>`;
 }
 
 // ---------- pages ----------
@@ -82,11 +207,12 @@ const pages = {
     if (st === 'early') list = list.filter(g => ['Early Signal', 'Emerging'].includes(g.stage)); else if (st) list = list.filter(g => g.stage === st);
     const fresh = games.filter(g => Date.now() - Date.parse(g.firstSeen) < 864e5 && ['Early Signal', 'Emerging'].includes(g.stage)).slice(0, 8);
     const opt = (v, cur, l) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l ?? v)}</option>`;
-    return `<h1>Early Discoveries</h1>
-    <p class="sub">Small and new games growing faster than their peers. Ranked by Early Trend Score (growth vs same-genre, same-size games, freshness, earliness, engagement, mechanic momentum, discovery-list signals). <span class="label-inf">*</span> = cold-start estimate until 48h of history.</p>
-    ${sum.historyHoursMedian < 48 ? `<div class="note">History so far: ~${sum.historyHoursMedian}h median per game. Growth scores sharpen after 48h and acceleration/consistency after 3 days.</div>` : ''}
-    ${fresh.length ? `<h2>Found in the last 24h</h2><div class="grid">${fresh.map(g => `<a class="card" href="#/game/${g.id}"><div class="score">${g.score}</div><div>${esc(g.name)}</div><div class="muted">${fmt(g.ccu)} CCU · ${g.ageDays}d old</div>${stage(g.stage)}</a>`).join('')}</div>` : ''}
-    <h2>Ranked</h2>
+    setTimeout(() => wireObservatory(games, names), 0);
+    return `${observatory(games)}
+    ${sum.historyHoursMedian < 48 ? `<div class="note">History so far: about ${sum.historyHoursMedian} hours per game. Growth scores sharpen after 48 hours, and acceleration and consistency after 3 days. Scores marked <span class="label-inf">*</span> are estimates until then.</div>` : ''}
+    ${fresh.length ? `<h2>Found in the last 24 hours</h2><div class="fresh">${fresh.map(g => `<a href="#/game/${g.id}">${stage(g.stage)}<div class="nm">${esc(g.name)}</div><div class="mt"><span class="num">${fmt(g.ccu)}</span> players, ${g.ageDays} days old, score <span class="num">${g.score}</span></div></a>`).join('')}</div>` : ''}
+    <h2>Ranked by Early Trend Score</h2>
+    <p class="sub" style="margin-bottom:14px">Growth against games of the same genre and size, freshness, earliness, engagement, mechanic momentum and discovery-list signals.</p>
     <form class="filters" id="f">
       <label>Max CCU<select name="max">${[500, 2000, 5000, 20000, 50000, 1e9].map(v => opt(v, maxCcu, v === 1e9 ? 'any' : fmt(v))).join('')}</select></label>
       <label>Max age (days)<select name="age">${[7, 14, 30, 60, 120, 100000].map(v => opt(v, maxAge, v === 100000 ? 'any' : v)).join('')}</select></label>
@@ -372,5 +498,5 @@ async function route() {
   if (s) s.addEventListener('submit', e => { e.preventDefault(); location.hash = '#/explorer?q=' + encodeURIComponent(new FormData(s).get('q')); });
 }
 window.addEventListener('hashchange', route);
-load('summary.json').then(s => { document.getElementById('freshness').innerHTML = `Updated ${ago(s.generatedAt)}<br>${s.trackedGames} games tracked`; }).catch(() => {});
+load('summary.json').then(s => { document.getElementById('freshness').innerHTML = `Last scan <b>${ago(s.generatedAt)}</b><br><b>${s.trackedGames.toLocaleString('en')}</b> games tracked`; }).catch(() => {});
 route();
